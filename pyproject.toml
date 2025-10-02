@@ -1,6 +1,6 @@
 [project]
 name = "giis-srv-selector"
-version = "0.2.0"
+version = "0.3.0"
 description = "GUI утилита для управления stunnel конфигурацией на Windows"
 readme = "README.md"
 requires-python = ">=3.13"

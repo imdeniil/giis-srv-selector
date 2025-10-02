@@ -2,12 +2,14 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Python](https://img.shields.io/badge/python-3.13%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **GUI утилита для управления stunnel конфигурацией на Windows**
+
+> 📦 Дополнительный пакет к проекту [GIIS Signer](https://github.com/imdeniil/giis-signer)
 
 [Скачать релиз](https://github.com/imdeniil/giis-srv-selector/releases/latest) • [Документация](docs/) • [Сообщить об ошибке](https://github.com/imdeniil/giis-srv-selector/issues)
 
@@ -18,6 +20,8 @@
 ## 📋 Описание
 
 Простое и удобное приложение для переключения между различными серверами stunnel через графический интерфейс. Избавляет от необходимости ручного редактирования конфигурационных файлов и управления службами Windows.
+
+**Часть экосистемы GIIS:** Эта утилита предназначена для использования совместно с [GIIS Signer](https://github.com/imdeniil/giis-signer) - основным инструментом для работы с ГИИС.
 
 ## ✨ Возможности
 
@@ -198,6 +202,6 @@ giis-srv-selector/
 
 <div align="center">
 
-**Версия 0.2.0** • Создано с помощью [Claude Code](https://claude.com/claude-code)
+**Версия 0.3.0** • Создано с помощью [Claude Code](https://claude.com/claude-code)
 
 </div>
