@@ -248,9 +248,26 @@ class StunnelGUI:
         config_frame = ttk.LabelFrame(self.root, text="Файл конфигурации", padding=10)
         config_frame.pack(fill='x', padx=20, pady=(10, 5))
 
+        # Контейнер для Entry/Label
+        path_container = ttk.Frame(config_frame)
+        path_container.pack(side='left', fill='x', expand=True, padx=(0, 5))
+
+        # Entry для отображения пути
         self.config_path_var = tk.StringVar(value=self.manager.config_file_path)
-        config_entry = ttk.Entry(config_frame, textvariable=self.config_path_var, state='readonly')
-        config_entry.pack(side='left', fill='x', expand=True, padx=(0, 5))
+        self.config_entry = ttk.Entry(path_container, textvariable=self.config_path_var, state='readonly')
+
+        # Placeholder label
+        self.config_placeholder = ttk.Label(
+            path_container,
+            text="Укажите путь до файла конфигурации",
+            foreground='gray'
+        )
+
+        # Показываем Entry или Placeholder в зависимости от наличия пути
+        if self.manager.config_file_path:
+            self.config_entry.pack(fill='x', expand=True)
+        else:
+            self.config_placeholder.pack(fill='x', expand=True)
 
         browse_btn = ttk.Button(config_frame, text="Обзор", command=self._browse_config, width=10)
         browse_btn.pack(side='left')
@@ -266,10 +283,13 @@ class StunnelGUI:
         # Dropdown со списком серверов
         self.server_var = tk.StringVar()
 
+        # Определяем начальное состояние dropdown
+        initial_state = 'readonly' if self.manager.config_file_path else 'disabled'
+
         self.server_combo = ttk.Combobox(
             dropdown_frame,
             textvariable=self.server_var,
-            state='readonly',
+            state=initial_state,
             width=50
         )
         self.server_combo.pack(side='left', fill='x', expand=True, padx=(0, 5))
@@ -317,6 +337,14 @@ class StunnelGUI:
             try:
                 self.manager.save_config_path(filename)
                 self.config_path_var.set(filename)
+
+                # Переключаем с placeholder на entry
+                self.config_placeholder.pack_forget()
+                self.config_entry.pack(fill='x', expand=True)
+
+                # Активируем dropdown
+                self.server_combo.config(state='readonly')
+
                 self._update_current_server()
                 messagebox.showinfo("Успешно", f"Путь к конфигу сохранен:\n{filename}")
             except Exception as e:
