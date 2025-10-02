@@ -9,6 +9,7 @@ import json
 import subprocess
 import ctypes
 import shutil
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -104,46 +105,36 @@ class StunnelManager:
             return None
 
     def stop_service(self):
-        """Остановить службу Stunnel"""
+        """Остановить службу Stunnel (используя TASKKILL)"""
         self.log(f"Остановка службы {self.SERVICE_NAME}...")
 
-        # Попытка остановить службу
+        # Используем TASKKILL для остановки службы
         result = subprocess.run(
-            ['net', 'stop', self.SERVICE_NAME],
+            ['TASKKILL', '/F', '/FI', f'SERVICES eq {self.SERVICE_NAME}'],
             capture_output=True,
             text=True,
-            encoding='cp866'
+            encoding='cp866',
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
 
-        if result.returncode != 0:
-            self.log(f"Не удалось остановить службу (net stop). Пытаемся завершить процесс...")
-            # Принудительное завершение процесса
-            result = subprocess.run(
-                ['taskkill', '/f', '/im', 'stunnel.exe'],
-                capture_output=True,
-                text=True,
-                encoding='cp866'
-            )
+        if result.returncode != 0 and "not found" not in result.stderr.lower():
+            self.log(f"ОШИБКА: Не удалось остановить службу!")
+            self.log(f"Вывод: {result.stderr}")
+            return False
 
-            if result.returncode != 0:
-                self.log(f"ОШИБКА: Не удалось остановить службу!")
-                return False
-
-            self.log("Процесс завершен принудительно")
-        else:
-            self.log("Служба остановлена успешно")
-
+        self.log("Служба остановлена успешно")
         return True
 
     def start_service(self):
-        """Запустить службу Stunnel"""
+        """Запустить службу Stunnel (используя sc start)"""
         self.log(f"Запуск службы {self.SERVICE_NAME}...")
 
         result = subprocess.run(
-            ['net', 'start', self.SERVICE_NAME],
+            ['sc', 'start', self.SERVICE_NAME],
             capture_output=True,
             text=True,
-            encoding='cp866'
+            encoding='cp866',
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
 
         if result.returncode != 0:
@@ -241,33 +232,26 @@ class StunnelGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("GIIS Server Selector")
-        self.root.geometry("600x450")
+        self.root.geometry("600x280")
         self.root.resizable(False, False)
 
         self.manager = StunnelManager()
+        self.is_processing = False
 
         self._create_widgets()
         self._update_current_server()
 
     def _create_widgets(self):
         """Создать элементы интерфейса"""
-        # Заголовок
-        title_label = ttk.Label(
-            self.root,
-            text="GIIS Server Selector",
-            font=('Arial', 16, 'bold')
-        )
-        title_label.pack(pady=10)
-
         # Фрейм для выбора конфига
         config_frame = ttk.LabelFrame(self.root, text="Файл конфигурации", padding=10)
-        config_frame.pack(fill='x', padx=20, pady=5)
+        config_frame.pack(fill='x', padx=20, pady=(10, 5))
 
         self.config_path_var = tk.StringVar(value=self.manager.config_file_path)
         config_entry = ttk.Entry(config_frame, textvariable=self.config_path_var, state='readonly')
         config_entry.pack(side='left', fill='x', expand=True, padx=(0, 5))
 
-        browse_btn = ttk.Button(config_frame, text="Обзор...", command=self._browse_config)
+        browse_btn = ttk.Button(config_frame, text="📁", command=self._browse_config, width=3)
         browse_btn.pack(side='left')
 
         # Фрейм текущего сервера
@@ -285,55 +269,50 @@ class StunnelGUI:
 
         # Фрейм выбора сервера
         select_frame = ttk.LabelFrame(self.root, text="Выбор сервера", padding=10)
-        select_frame.pack(fill='both', expand=True, padx=20, pady=5)
+        select_frame.pack(fill='x', padx=20, pady=5)
 
-        ttk.Label(select_frame, text="Доступные серверы:").pack(anchor='w', pady=(0, 5))
+        # Создаем фрейм для dropdown и кнопок
+        dropdown_frame = ttk.Frame(select_frame)
+        dropdown_frame.pack(fill='x')
 
+        # Dropdown со списком серверов
         self.server_var = tk.StringVar()
-        for ip, description in StunnelManager.SERVERS.items():
-            ttk.Radiobutton(
-                select_frame,
-                text=f"{ip} - {description}",
-                variable=self.server_var,
-                value=ip
-            ).pack(anchor='w', pady=2)
+        server_list = [f"{ip} - {desc}" for ip, desc in StunnelManager.SERVERS.items()]
 
-        # Фрейм кнопок управления
-        control_frame = ttk.Frame(self.root, padding=10)
-        control_frame.pack(fill='x', padx=20, pady=5)
-
-        change_btn = ttk.Button(
-            control_frame,
-            text="Применить изменения",
-            command=self._change_server,
-            style='Accent.TButton'
+        self.server_combo = ttk.Combobox(
+            dropdown_frame,
+            textvariable=self.server_var,
+            values=server_list,
+            state='readonly',
+            width=50
         )
-        change_btn.pack(side='left', padx=5)
+        self.server_combo.pack(side='left', fill='x', expand=True, padx=(0, 5))
+        self.server_combo.bind('<<ComboboxSelected>>', lambda e: self._on_server_selected())
 
-        refresh_btn = ttk.Button(
-            control_frame,
-            text="Обновить",
-            command=self._update_current_server
+        # Кнопка сохранить
+        save_btn = ttk.Button(dropdown_frame, text="💾", command=self._change_server, width=3)
+        save_btn.pack(side='left', padx=2)
+
+        # Кнопка открыть лог
+        log_btn = ttk.Button(dropdown_frame, text="📋", command=self._open_log, width=3)
+        log_btn.pack(side='left', padx=2)
+
+        # Прогресс-бар (скрыт по умолчанию)
+        self.progress_frame = ttk.Frame(self.root)
+        self.progress_frame.pack(fill='x', padx=20, pady=5)
+
+        self.progress_label = ttk.Label(self.progress_frame, text="")
+        self.progress_label.pack()
+
+        self.progress_bar = ttk.Progressbar(
+            self.progress_frame,
+            mode='indeterminate',
+            length=560
         )
-        refresh_btn.pack(side='left', padx=5)
+        self.progress_bar.pack()
 
-        # Фрейм дополнительных кнопок
-        extra_frame = ttk.Frame(self.root, padding=10)
-        extra_frame.pack(fill='x', padx=20, pady=5)
-
-        log_btn = ttk.Button(
-            extra_frame,
-            text="Открыть лог",
-            command=self._open_log
-        )
-        log_btn.pack(side='left', padx=5)
-
-        log_folder_btn = ttk.Button(
-            extra_frame,
-            text="Открыть папку логов",
-            command=self._open_log_folder
-        )
-        log_folder_btn.pack(side='left', padx=5)
+        # Скрываем прогресс-бар
+        self.progress_frame.pack_forget()
 
     def _browse_config(self):
         """Открыть диалог выбора файла конфигурации"""
@@ -357,28 +336,48 @@ class StunnelGUI:
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить путь:\n{e}")
 
+    def _on_server_selected(self):
+        """Обработчик выбора сервера в dropdown"""
+        pass  # Можно добавить логику при необходимости
+
     def _update_current_server(self):
         """Обновить информацию о текущем сервере"""
         current_ip = self.manager.get_current_server()
         if current_ip:
             description = StunnelManager.SERVERS.get(current_ip, "неизвестный сервер")
             self.current_server_var.set(f"{current_ip} ({description})")
-            # Установить радиокнопку
+            # Установить в dropdown
             if current_ip in StunnelManager.SERVERS:
-                self.server_var.set(current_ip)
+                self.server_var.set(f"{current_ip} - {description}")
         else:
             self.current_server_var.set("Не определен")
 
+    def _show_progress(self, message):
+        """Показать прогресс-бар"""
+        self.progress_label.config(text=message)
+        self.progress_frame.pack(fill='x', padx=20, pady=5)
+        self.progress_bar.start(10)
+
+    def _hide_progress(self):
+        """Скрыть прогресс-бар"""
+        self.progress_bar.stop()
+        self.progress_frame.pack_forget()
+
     def _change_server(self):
         """Изменить сервер"""
-        new_ip = self.server_var.get()
+        if self.is_processing:
+            return
 
-        if not new_ip:
+        selected = self.server_var.get()
+        if not selected:
             messagebox.showwarning("Предупреждение", "Выберите сервер из списка!")
             return
 
+        # Извлечь IP из строки "IP - описание"
+        new_ip = selected.split(' - ')[0]
+
         if not self.manager.config_file_path or not os.path.exists(self.manager.config_file_path):
-            messagebox.showerror("Ошибка", "Файл конфигурации не указан или не существует!\nВыберите файл через кнопку 'Обзор'.")
+            messagebox.showerror("Ошибка", "Файл конфигурации не указан или не существует!\nВыберите файл через кнопку 📁")
             return
 
         # Подтверждение
@@ -397,16 +396,35 @@ class StunnelGUI:
         if not confirm:
             return
 
-        # Выполнить изменение
-        try:
-            self.manager.change_server(new_ip)
-            self._update_current_server()
-            messagebox.showinfo(
-                "Успешно",
-                f"Сервер успешно изменен на:\n{new_ip} ({description})\n\nСлужба перезапущена."
-            )
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось изменить сервер:\n\n{e}\n\nПроверьте лог для деталей.")
+        # Выполнить изменение в отдельном потоке
+        self.is_processing = True
+        self._show_progress("Изменение сервера...")
+
+        def change_in_thread():
+            try:
+                self.manager.change_server(new_ip)
+                self.root.after(0, lambda: self._on_change_success(new_ip, description))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_change_error(e))
+
+        thread = threading.Thread(target=change_in_thread, daemon=True)
+        thread.start()
+
+    def _on_change_success(self, new_ip, description):
+        """Обработка успешного изменения сервера"""
+        self._hide_progress()
+        self.is_processing = False
+        self._update_current_server()
+        messagebox.showinfo(
+            "Успешно",
+            f"Сервер успешно изменен на:\n{new_ip} ({description})\n\nСлужба перезапущена."
+        )
+
+    def _on_change_error(self, error):
+        """Обработка ошибки изменения сервера"""
+        self._hide_progress()
+        self.is_processing = False
+        messagebox.showerror("Ошибка", f"Не удалось изменить сервер:\n\n{error}\n\nПроверьте лог для деталей.")
 
     def _open_log(self):
         """Открыть текущий файл лога"""
@@ -414,10 +432,6 @@ class StunnelGUI:
             os.startfile(self.manager.log_file)
         else:
             messagebox.showwarning("Предупреждение", "Файл лога не найден!")
-
-    def _open_log_folder(self):
-        """Открыть папку с логами"""
-        os.startfile(self.manager.config_dir)
 
 
 def is_admin():
