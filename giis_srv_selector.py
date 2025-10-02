@@ -232,11 +232,12 @@ class StunnelGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("GIIS Server Selector")
-        self.root.geometry("600x280")
+        self.root.geometry("600x220")
         self.root.resizable(False, False)
 
         self.manager = StunnelManager()
         self.is_processing = False
+        self.current_server_ip = None
 
         self._create_widgets()
         self._update_current_server()
@@ -251,21 +252,8 @@ class StunnelGUI:
         config_entry = ttk.Entry(config_frame, textvariable=self.config_path_var, state='readonly')
         config_entry.pack(side='left', fill='x', expand=True, padx=(0, 5))
 
-        browse_btn = ttk.Button(config_frame, text="📁", command=self._browse_config, width=3)
+        browse_btn = ttk.Button(config_frame, text="Обзор", command=self._browse_config, width=10)
         browse_btn.pack(side='left')
-
-        # Фрейм текущего сервера
-        current_frame = ttk.LabelFrame(self.root, text="Текущий сервер", padding=10)
-        current_frame.pack(fill='x', padx=20, pady=5)
-
-        self.current_server_var = tk.StringVar(value="Не определен")
-        current_label = ttk.Label(
-            current_frame,
-            textvariable=self.current_server_var,
-            font=('Arial', 11, 'bold'),
-            foreground='blue'
-        )
-        current_label.pack()
 
         # Фрейм выбора сервера
         select_frame = ttk.LabelFrame(self.root, text="Выбор сервера", padding=10)
@@ -277,12 +265,10 @@ class StunnelGUI:
 
         # Dropdown со списком серверов
         self.server_var = tk.StringVar()
-        server_list = [f"{ip} - {desc}" for ip, desc in StunnelManager.SERVERS.items()]
 
         self.server_combo = ttk.Combobox(
             dropdown_frame,
             textvariable=self.server_var,
-            values=server_list,
             state='readonly',
             width=50
         )
@@ -290,11 +276,11 @@ class StunnelGUI:
         self.server_combo.bind('<<ComboboxSelected>>', lambda e: self._on_server_selected())
 
         # Кнопка сохранить
-        save_btn = ttk.Button(dropdown_frame, text="💾", command=self._change_server, width=3)
-        save_btn.pack(side='left', padx=2)
+        self.save_btn = ttk.Button(dropdown_frame, text="Сохранить", command=self._change_server, width=12)
+        self.save_btn.pack(side='left', padx=2)
 
         # Кнопка открыть лог
-        log_btn = ttk.Button(dropdown_frame, text="📋", command=self._open_log, width=3)
+        log_btn = ttk.Button(dropdown_frame, text="Лог", command=self._open_log, width=8)
         log_btn.pack(side='left', padx=2)
 
         # Прогресс-бар (скрыт по умолчанию)
@@ -338,19 +324,48 @@ class StunnelGUI:
 
     def _on_server_selected(self):
         """Обработчик выбора сервера в dropdown"""
-        pass  # Можно добавить логику при необходимости
+        self._update_save_button_state()
+
+    def _update_save_button_state(self):
+        """Обновить состояние кнопки сохранения"""
+        selected = self.server_var.get()
+        if not selected:
+            self.save_btn.config(state='disabled')
+            return
+
+        # Извлечь IP из выбранной строки
+        selected_ip = selected.split(' - ')[0].replace(' | Установлен', '')
+
+        # Если выбран тот же сервер что и установлен - disable
+        if selected_ip == self.current_server_ip:
+            self.save_btn.config(state='disabled')
+        else:
+            self.save_btn.config(state='normal')
 
     def _update_current_server(self):
         """Обновить информацию о текущем сервере"""
         current_ip = self.manager.get_current_server()
-        if current_ip:
-            description = StunnelManager.SERVERS.get(current_ip, "неизвестный сервер")
-            self.current_server_var.set(f"{current_ip} ({description})")
-            # Установить в dropdown
-            if current_ip in StunnelManager.SERVERS:
-                self.server_var.set(f"{current_ip} - {description}")
-        else:
-            self.current_server_var.set("Не определен")
+        self.current_server_ip = current_ip
+
+        # Формируем список для dropdown
+        server_list = []
+        for ip, desc in StunnelManager.SERVERS.items():
+            if ip == current_ip:
+                server_list.append(f"{ip} - {desc} | Установлен")
+            else:
+                server_list.append(f"{ip} - {desc}")
+
+        self.server_combo['values'] = server_list
+
+        # Устанавливаем текущий сервер в dropdown
+        if current_ip and current_ip in StunnelManager.SERVERS:
+            description = StunnelManager.SERVERS.get(current_ip)
+            self.server_var.set(f"{current_ip} - {description} | Установлен")
+        elif server_list:
+            # Если сервер не определен, выбираем первый из списка
+            self.server_var.set(server_list[0])
+
+        self._update_save_button_state()
 
     def _show_progress(self, message):
         """Показать прогресс-бар"""
@@ -373,11 +388,11 @@ class StunnelGUI:
             messagebox.showwarning("Предупреждение", "Выберите сервер из списка!")
             return
 
-        # Извлечь IP из строки "IP - описание"
-        new_ip = selected.split(' - ')[0]
+        # Извлечь IP из строки "IP - описание" или "IP - описание | Установлен"
+        new_ip = selected.split(' - ')[0].replace(' | Установлен', '')
 
         if not self.manager.config_file_path or not os.path.exists(self.manager.config_file_path):
-            messagebox.showerror("Ошибка", "Файл конфигурации не указан или не существует!\nВыберите файл через кнопку 📁")
+            messagebox.showerror("Ошибка", "Файл конфигурации не указан или не существует!\nВыберите файл через кнопку 'Обзор'")
             return
 
         # Подтверждение
@@ -398,6 +413,7 @@ class StunnelGUI:
 
         # Выполнить изменение в отдельном потоке
         self.is_processing = True
+        self.save_btn.config(state='disabled')
         self._show_progress("Изменение сервера...")
 
         def change_in_thread():
