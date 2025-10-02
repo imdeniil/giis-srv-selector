@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Python](https://img.shields.io/badge/python-3.13%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -198,6 +198,6 @@ giis-srv-selector/
 
 <div align="center">
 
-**Версия 0.1.0** • Создано с помощью [Claude Code](https://claude.com/claude-code)
+**Версия 0.2.0** • Создано с помощью [Claude Code](https://claude.com/claude-code)
 
 </div>
